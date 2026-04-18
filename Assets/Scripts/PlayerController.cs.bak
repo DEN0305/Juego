@@ -1,0 +1,157 @@
+﻿using UnityEngine;
+using UnityEngine.InputSystem;
+
+[RequireComponent(typeof(Rigidbody2D))]
+public class PlayerController : MonoBehaviour
+{
+    [Header("Movement")]
+    [SerializeField] private float moveSpeed = 7f;
+    [SerializeField] private float jumpForce = 12f;
+
+    [Header("Ground Check")]
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundCheckRadius = 0.18f;
+    [SerializeField] private LayerMask groundLayer;
+
+    [Header("Death Rules")]
+    [SerializeField] private float topDeathY = 4f;
+    [SerializeField] private float voidDeathY = -5.6f;
+
+    private Rigidbody2D rb;
+    private bool isGrounded;
+    private bool isDead;
+
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+
+        SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.sprite = RuntimeSpriteFactory.GetDefaultSprite();
+        }
+    }
+
+    private void Update()
+    {
+        if (isDead)
+        {
+            return;
+        }
+
+        HandleJumpInput();
+        CheckDeathBounds();
+    }
+
+    private void FixedUpdate()
+    {
+        if (isDead)
+        {
+            return;
+        }
+
+        HandleHorizontalMove();
+        UpdateGroundedState();
+    }
+
+    private void HandleHorizontalMove()
+    {
+        float inputX = 0f;
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null)
+        {
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed)
+            {
+                inputX -= 1f;
+            }
+
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed)
+            {
+                inputX += 1f;
+            }
+        }
+
+        Gamepad gamepad = Gamepad.current;
+        if (gamepad != null)
+        {
+            inputX += gamepad.leftStick.x.ReadValue();
+        }
+
+        rb.linearVelocity = new Vector2(inputX * moveSpeed, rb.linearVelocity.y);
+    }
+
+    private void HandleJumpInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        bool jumpPressed = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+
+        Gamepad gamepad = Gamepad.current;
+        if (!jumpPressed && gamepad != null)
+        {
+            jumpPressed = gamepad.buttonSouth.wasPressedThisFrame;
+        }
+
+        if (!jumpPressed || !isGrounded)
+        {
+            return;
+        }
+
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0f);
+        rb.AddForce(Vector2.up * jumpForce, ForceMode2D.Impulse);
+    }
+
+    private void UpdateGroundedState()
+    {
+        if (groundCheck == null)
+        {
+            isGrounded = false;
+            return;
+        }
+
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+    }
+
+    private void CheckDeathBounds()
+    {
+        if (transform.position.y <= voidDeathY || transform.position.y >= topDeathY)
+        {
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        if (isDead)
+        {
+            return;
+        }
+
+        isDead = true;
+        GameManager.Instance?.PlayerDied();
+    }
+
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        if (isDead)
+        {
+            return;
+        }
+
+        if (other.CompareTag("KillZone"))
+        {
+            Die();
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (groundCheck == null)
+        {
+            return;
+        }
+
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+    }
+}
